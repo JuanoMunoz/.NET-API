@@ -1,0 +1,9 @@
+@PRACTICE_HostAddress = http://localhost:5220
+
+GET {{PRACTICE_HostAddress}}/api/People
+Accept: application/json
+
+###
+
+GET {{PRACTICE_HostAddress}}//
+Accept: application/json
