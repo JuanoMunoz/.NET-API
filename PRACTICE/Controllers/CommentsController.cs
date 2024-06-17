@@ -4,8 +4,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using PRACTICE.Context;
+using PRACTICE.Dto_s;
+using PRACTICE.Dto_s.Comment;
+using PRACTICE.Helpers;
+using PRACTICE.Interfaces;
+using PRACTICE.Mapper;
 using PRACTICE.Models;
 
 namespace PRACTICE.Controllers
@@ -14,95 +20,73 @@ namespace PRACTICE.Controllers
     [ApiController]
     public class CommentsController : ControllerBase
     {
-        private readonly ApplicationDBContext _context;
+        private readonly ICommentRepository _commentRepo;
+        private readonly IRepository _stockRepo;
 
-        public CommentsController(ApplicationDBContext context)
+        public CommentsController(ICommentRepository commentRepo, IRepository stockRepo)
         {
-            _context = context;
+            _commentRepo = commentRepo;
+            _stockRepo = stockRepo;
         }
 
         // GET: api/Comments
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Comment>>> GetComments()
+        public async Task<IActionResult> GetAll()
         {
-            return await _context.Comments.ToListAsync();
+            var comments = await _commentRepo.GetAllAsync();
+            var CommentsDto = comments.Select(comment=>comment.ToCommentDTO()).ToList();
+            return Ok(CommentsDto);
         }
-
-        // GET: api/Comments/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Comment>> GetComment(int id)
+        public async Task<IActionResult> GetById(int id)
         {
-            var comment = await _context.Comments.FindAsync(id);
-
-            if (comment == null)
-            {
-                return NotFound();
+            var comment = await _commentRepo.GetByIdAsync(id);
+            if (comment == null) {
+                return NoContent();
             }
-
-            return comment;
+            return Ok(comment.ToCommentDTO());
         }
 
-        // PUT: api/Comments/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost("{id}")]
+        public async Task<IActionResult> Create([FromRoute]int id,CreateCommentDTO commentDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            if (!await _stockRepo.StockExistsAsync(id))
+            {
+                return BadRequest("The stock you are trynna comment does not exist ");
+            }
+            var comment = commentDto.ToComment(id);
+            await _commentRepo.CreateCommentAsync(comment);
+            return CreatedAtAction(nameof(GetById), new {id = comment.Id}, comment);
+        }
+
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutComment(int id, Comment comment)
+        public async Task<IActionResult> Update([FromRoute] int id, UpdateCommentDTO commentDto)
         {
-            if (id != comment.Id)
+            if (!ModelState.IsValid)
             {
-                return BadRequest();
+                return BadRequest(ModelState);
             }
-
-            _context.Entry(comment).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CommentExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // POST: api/Comments
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Comment>> PostComment(Comment comment)
-        {
-            _context.Comments.Add(comment);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetComment", new { id = comment.Id }, comment);
-        }
-
-        // DELETE: api/Comments/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteComment(int id)
-        {
-            var comment = await _context.Comments.FindAsync(id);
-            if (comment == null)
+            var Comment = await _commentRepo.UpdateAsync(id, commentDto);
+            if (Comment == null)
             {
                 return NotFound();
             }
-
-            _context.Comments.Remove(comment);
-            await _context.SaveChangesAsync();
-
             return NoContent();
         }
-
-        private bool CommentExists(int id)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete([FromRoute] int id)
         {
-            return _context.Comments.Any(e => e.Id == id);
+            var comment = await _commentRepo.DeleteCommentAsync(id);
+            if(comment == null)
+            {
+                return NotFound();
+            }
+            return NoContent();
         }
     }
 }
+          
